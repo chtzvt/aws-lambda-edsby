@@ -8,30 +8,45 @@ config = ConfigParser()
 def handle_request(event, context):
     config.readfp(open('config.cfg'))
 
+    # If request body is empty
     if event['body'] is None:
-        return {"isBase64Encoded": False, "statusCode": 400, "headers": None, "body": json.dumps({"error": "bad request"})}
+        return formatResponse(400, None, 'error', 'bad request')
 
-    if event['body']['key'] is None or config.get('api_key', 'key') is not event['body']['key']:
-        return {"isBase64Encoded": False, "statusCode": 403, "headers": None, "body": json.dumps({"error": "no API key"})}
+    # If the body is a string, then we need to parse it to JSON
+    if isinstance(event['body'], basestring):
+        try:
+            event['body'] = json.loads(event['body'])
+        except:
+            # If parsing fails, that means we got invalid JSON. Return an error
+            return formatResponse(400, None, 'error', 'bad request')
 
-	link = event['body']['link'] if 'link' in event else ''
-    text = event['body']['text'] if 'text' in event else ''
-    classIDs = event['body']['classIDs'] if 'classIDs' in event else config.get('edsby', 'classIDs')
-    username = event['body']['username'] if 'username' in event else config.get('edsby', 'username')
-    password = event['body']['password'] if 'password' in event else config.get('edsby', 'password')
+    # Check that the API key is valid
+    if event['body']['key'] is None or config.get('api_key', 'key') != event['body']['key']:
+        return formatResponse(403, None, 'error', 'invalid API key')
+
+    # Constuct the message from the POSTed json. Defaults to ''
+    link = event['body']['link'] if 'link' in event['body'] else ''
+    text = event['body']['text'] if 'text' in event['body'] else ''
+    # Function will either use credentials provided in the request or
+    # fall back to credentials provided in the config file by default.
+    classIDs = event['body']['classIDs'] if 'classIDs' in event['body'] else config.get('edsby', 'classIDs')
+    username = event['body']['username'] if 'username' in event['body'] else config.get('edsby', 'username')
+    password = event['body']['password'] if 'password' in event['body'] else config.get('edsby', 'password')
 
     message = postMessage((username, password), link, text, classIDs.split(','))
 
-    return {"isBase64Encoded": False, "statusCode": 403, "headers": None, "body": json.dumps({"success":message})}
+    return formatResponse(200, None, 'success', message)
 
 
 def postMessage(creds, link, text, classIDs):
     edsby = Edsby(host=config.get('edsby', 'host'), username=creds[0],
         password=creds[1], meta={'nid':config.get('edsby', 'metaNID')})
 
+    # Retrieve link metadata
     meta = edsby.scrapeURLMetadata(classIDs[0], link)
     meta = edsby.formatURLMetadata(meta)
 
+    # Construct JSON payload with message
     message = {
             'text': text + ' ' + link,
             'url': json.dumps(meta),
@@ -42,7 +57,12 @@ def postMessage(creds, link, text, classIDs):
             'files': '',
     }
 
+    # Submit message to Edsby for each class
     for NID in classIDs:
         edsby.postMessageInClassFeed(NID, message)
 
     return message
+
+# Generic response formatter for return values.
+def formatResponse(code, headers, message, content):
+    return {"isBase64Encoded": False, "statusCode": code, "headers": headers, "body": json.dumps({message: content})}
