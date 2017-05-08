@@ -39,3 +39,8 @@ zip -r ~/Desktop/edsby_lambda.zip ./*
 - **Handler:** main.handle_request
 - **Memory:** 128
 - **Timeout:** 5 sec
+
+
+## Public use
+
+If you are a teacher who is seeking to add automated posting functionality to your workflow, but aren't otherwise able to get this lambda function set up, [contact me](https://www.ctis.me). I'll let you use my public instance.
